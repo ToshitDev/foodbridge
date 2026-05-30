@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
 import { Utensils, Home, ArrowRight, Leaf, MapPin, CheckCircle, Clock, Package } from "lucide-react";
+import ImpactCounter from "@/components/ImpactCounter";
 
 // ── Mock UI previews for each demo step ──────────────────────────────────────
 
@@ -273,6 +274,9 @@ export default function LandingPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Live Impact ── */}
+      <ImpactCounter />
 
       {/* ── How it works ── */}
       <section className="bg-white border-t border-gray-100 px-6 py-14">

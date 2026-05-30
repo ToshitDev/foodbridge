@@ -6,12 +6,16 @@ export interface Donation {
   foodItem: string;
   quantity: string;
   pickupWindow: string;
+  address: string;
+  tags: string[];
+  expiresAt: number;
   status: DonationStatus;
   lat: number;
   lng: number;
   createdAt: number;
   claimedBy: string | null;
   restaurantId: string;
+  hasUnreadForRestaurant?: boolean;
 }
 
 export interface AppUser {
@@ -19,4 +23,12 @@ export interface AppUser {
   email: string;
   role: "restaurant" | "shelter";
   name: string;
+}
+
+export interface Message {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  createdAt: number;
 }

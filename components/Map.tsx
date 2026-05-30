@@ -95,7 +95,8 @@ export default function DonationMap({ donations, onPinClick }: Props) {
               <p style="font-weight:700;margin:0 0 4px">${d.foodItem}</p>
               <p style="margin:0 0 2px;color:#555;font-size:12px">${d.restaurantName}</p>
               <p style="margin:0 0 2px;font-size:12px">📦 ${d.quantity}</p>
-              <p style="margin:0 0 6px;font-size:12px">🕐 ${d.pickupWindow}</p>
+              <p style="margin:0 0 2px;font-size:12px">🕐 ${d.pickupWindow}</p>
+              ${d.address ? `<p style="margin:0 0 6px;font-size:12px">📍 ${d.address}</p>` : '<p style="margin:0 0 6px"></p>'}
               <span style="
                 background:${isAvailable ? "#dcfce7" : "#f3f4f6"};
                 color:${isAvailable ? "#166534" : "#6b7280"};

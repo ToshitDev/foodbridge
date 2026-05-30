@@ -7,29 +7,30 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { Donation } from "@/lib/types";
 import DonationCard from "@/components/DonationCard";
+import ChatPanel from "@/components/ChatPanel";
+import TagPill from "@/components/TagPill";
 import { Leaf, LogOut, Map as MapIcon, List } from "lucide-react";
 import dynamic from "next/dynamic";
 
 const DonationMap = dynamic(() => import("@/components/Map"), { ssr: false });
 
 const MAP_HEIGHT = "calc(100vh - 57px)";
+const ALL_TAGS = ["veg", "non-veg", "allergen-free"] as const;
 
 export default function ShelterPage() {
   const { appUser, loading, logout } = useAuth();
   const router = useRouter();
   const [donations, setDonations] = useState<Donation[]>([]);
   const [view, setView] = useState<"map" | "list">("map");
-  // store ID only — derive the live donation object from the donations array
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [claiming, setClaiming] = useState<string | null>(null);
+  const [chatDonationId, setChatDonationId] = useState<string | null>(null);
+  const [activeTag, setActiveTag] = useState<string | null>(null);
   const [timedOut, setTimedOut] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const highlighted = highlightedId
-    ? donations.find((d) => d.id === highlightedId) ?? null
-    : null;
+  const highlighted = highlightedId ? donations.find((d) => d.id === highlightedId) ?? null : null;
 
-  // Show an error after 3 s if auth hasn't resolved
   useEffect(() => {
     if (loading) {
       timeoutRef.current = setTimeout(() => setTimedOut(true), 3000);
@@ -48,7 +49,6 @@ export default function ShelterPage() {
 
   useEffect(() => {
     if (!appUser) return;
-
     const q = query(collection(db, "donations"));
     const unsub = onSnapshot(q, (snap) => {
       const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Donation));
@@ -61,10 +61,7 @@ export default function ShelterPage() {
     if (!appUser) return;
     setClaiming(id);
     try {
-      await updateDoc(doc(db, "donations", id), {
-        status: "claimed",
-        claimedBy: appUser.id,
-      });
+      await updateDoc(doc(db, "donations", id), { status: "claimed", claimedBy: appUser.id });
     } finally {
       setClaiming(null);
     }
@@ -84,10 +81,8 @@ export default function ShelterPage() {
             <p className="text-gray-500 text-sm mb-4">
               Could not load your account. Check your Firestore security rules or internet connection.
             </p>
-            <button
-              onClick={() => router.replace("/auth?role=shelter")}
-              className="text-sm font-semibold text-white bg-green-600 hover:bg-green-700 px-4 py-2 rounded-xl transition-colors"
-            >
+            <button onClick={() => router.replace("/auth?role=shelter")}
+              className="text-sm font-semibold text-white bg-green-600 hover:bg-green-700 px-4 py-2 rounded-xl transition-colors">
               Back to sign in
             </button>
           </div>
@@ -98,8 +93,14 @@ export default function ShelterPage() {
     );
   }
 
-  const available = donations.filter((d) => d.status === "available");
-  const claimed = donations.filter((d) => d.status !== "available");
+  // Apply tag filter
+  const filtered = activeTag
+    ? donations.filter((d) => d.tags?.includes(activeTag))
+    : donations;
+
+  const available = filtered.filter((d) => d.status === "available");
+  const claimed   = filtered.filter((d) => d.status !== "available");
+  const chatDonation = chatDonationId ? donations.find((d) => d.id === chatDonationId) : null;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -117,26 +118,17 @@ export default function ShelterPage() {
           </div>
           <div className="flex items-center gap-3">
             <div className="flex bg-gray-100 rounded-lg p-0.5">
-              {([
-                { id: "map", icon: MapIcon },
-                { id: "list", icon: List },
-              ] as const).map(({ id, icon: Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => setView(id)}
+              {([{ id: "map", icon: MapIcon }, { id: "list", icon: List }] as const).map(({ id, icon: Icon }) => (
+                <button key={id} onClick={() => setView(id)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
                     view === id ? "bg-white shadow text-gray-900" : "text-gray-400"
-                  }`}
-                >
-                  <Icon size={13} />
-                  <span className="capitalize">{id}</span>
+                  }`}>
+                  <Icon size={13} /><span className="capitalize">{id}</span>
                 </button>
               ))}
             </div>
-            <button
-              onClick={async () => { await logout(); router.push("/"); }}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-            >
+            <button onClick={async () => { await logout(); router.push("/"); }}
+              className="text-gray-400 hover:text-gray-600 transition-colors">
               <LogOut size={16} />
             </button>
           </div>
@@ -145,10 +137,8 @@ export default function ShelterPage() {
 
       {/* Map view */}
       {view === "map" && (
-        // relative + explicit height so the absolute-inset-0 map div fills it correctly
         <div className="relative" style={{ height: MAP_HEIGHT }}>
-          <DonationMap donations={donations} onPinClick={handlePinClick} />
-          {/* Legend */}
+          <DonationMap donations={filtered} onPinClick={handlePinClick} />
           <div className="absolute bottom-4 left-4 bg-white rounded-xl shadow-lg border border-gray-100 px-3 py-2.5 flex flex-col gap-1.5 z-10">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-green-600 border-2 border-green-700" />
@@ -164,25 +154,46 @@ export default function ShelterPage() {
 
       {/* List view */}
       {view === "list" && (
-        <main className="max-w-2xl mx-auto w-full px-4 py-6 space-y-6">
+        <main className="max-w-2xl mx-auto w-full px-4 py-6 space-y-5">
+          {/* Tag filter bar */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+            <button
+              onClick={() => setActiveTag(null)}
+              className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full border transition-all ${
+                activeTag === null
+                  ? "bg-gray-800 text-white border-gray-800"
+                  : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+              }`}
+            >
+              All
+            </button>
+            {ALL_TAGS.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                className={`shrink-0 transition-all ${
+                  activeTag === tag ? "ring-2 ring-offset-1 ring-gray-400 rounded-full" : ""
+                }`}
+              >
+                <TagPill tag={tag} />
+              </button>
+            ))}
+          </div>
+
           {highlighted && (
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-green-700 uppercase tracking-wide">
-                  Selected from map
-                </h2>
-                <button
-                  onClick={() => setHighlightedId(null)}
-                  className="text-xs text-gray-400 hover:text-gray-600"
-                >
-                  Clear
-                </button>
+                <h2 className="text-sm font-semibold text-green-700 uppercase tracking-wide">Selected from map</h2>
+                <button onClick={() => setHighlightedId(null)} className="text-xs text-gray-400 hover:text-gray-600">Clear</button>
               </div>
               <DonationCard
                 donation={highlighted}
                 showClaim
                 claiming={claiming === highlighted.id}
                 onClaim={claimDonation}
+                showQR={highlighted.claimedBy === appUser.id}
+                showChat={highlighted.claimedBy === appUser.id}
+                onChat={setChatDonationId}
               />
             </div>
           )}
@@ -193,7 +204,9 @@ export default function ShelterPage() {
             </h2>
             {available.length === 0 ? (
               <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-                <p className="text-gray-400 text-sm">No available donations right now.</p>
+                <p className="text-gray-400 text-sm">
+                  {activeTag ? `No ${activeTag} donations available right now.` : "No available donations right now."}
+                </p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -217,12 +230,28 @@ export default function ShelterPage() {
               </h2>
               <div className="space-y-3">
                 {claimed.map((d) => (
-                  <DonationCard key={d.id} donation={d} />
+                  <DonationCard
+                    key={d.id}
+                    donation={d}
+                    showQR={d.claimedBy === appUser.id}
+                    showChat={d.claimedBy === appUser.id}
+                    onChat={setChatDonationId}
+                  />
                 ))}
               </div>
             </div>
           )}
         </main>
+      )}
+
+      {chatDonation && (
+        <ChatPanel
+          donationId={chatDonation.id}
+          donationTitle={chatDonation.foodItem}
+          restaurantName={chatDonation.restaurantName}
+          currentUser={appUser}
+          onClose={() => setChatDonationId(null)}
+        />
       )}
     </div>
   );
